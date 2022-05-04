@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: GPL-3.0
+//Solidity supported version
+pragma solidity >=0.7.0 <0.9.0;
+ 
+/**
+* @title Ballot
+* @dev Implements voting process along with vote delegation
+*/
+//Smart contract definition think of public void or def
+contract Ballot {
+ //Similar de C structs we define our own voter struct
+   struct Voter {
+       uint weight; // weight is accumulated by delegation
+       bool voted;  // if true, that person already voted
+       address delegate; // person delegated to
+       uint vote;   // index of the voted proposal
+   }
+//Similar de C structs we define our own proposal struct
+   struct Proposal {
+       // If you can limit the length to a certain number of bytes,
+       // always use one of bytes1 to bytes32 because they are much cheaper
+       bytes32 name;   // short name (up to 32 bytes)
+       uint voteCount; // number of accumulated votes
+   }
+// ETHereum address
+   address public chairperson;
+//Mapping struct for own voter just any address that wants to vote
+   mapping(address => Voter) public voters;
+//Proposal definition
+   Proposal[] public proposals;
+ 
+   /**
+    * @dev Create a new ballot to choose one of 'proposalNames'.
+    * @param proposalNames names of proposals
+    */
+//Constructor class stores in bytes 32 the names for our proposals
+   constructor(bytes32[] memory proposalNames) {
+//Message from the chairperson defined
+       chairperson = msg.sender;
+//Voters
+       voters[chairperson].weight = 1;
+//Loop to add/push proposal at the end of the proposals goes through al the list
+       for (uint i = 0; i < proposalNames.length; i++) {
+           // 'Proposal({...})' creates a temporary
+           // Proposal object and 'proposals.push(...)'
+           // appends it to the end of 'proposals'.
+           proposals.push(Proposal({
+               name: proposalNames[i],
+//Vote count initalized in zero
+               voteCount: 0
+           }));
+       }
+   }
+  
+   /**
+    * @dev Give 'voter' the right to vote on this ballot. May only be called by 'chairperson'.
+    * @param voter address of voter
+    */
+   function giveRightToVote(address voter) public {
+//Validation of chaiperson
+       require(
+           msg.sender == chairperson,
+           "Only chairperson can give right to vote."
+       );
+//Validation of duplicate voting
+       require(
+           !voters[voter].voted,
+           "The voter already voted."
+       );
+//each vote
+       require(voters[voter].weight == 0);
+       voters[voter].weight = 1;
+   }
+ 
+   /**
+    * @dev Delegate your vote to the voter 'to'.
+    * @param to address to which vote is delegated
+    */
+   function delegate(address to) public {
+//Voter messaging storage
+       Voter storage sender = voters[msg.sender];
+//Notificatopn for already voted
+       require(!sender.voted, "You already voted.");
+//Validation to self
+       require(to != msg.sender, "Self-delegation is disallowed.");
+//Loop for checking address vs delegation process
+       while (voters[to].delegate != address(0)) {
+           to = voters[to].delegate;
+ 
+           // We found a loop in the delegation, not allowed.
+           require(to != msg.sender, "Found loop in delegation.");
+       }
+//Flag for voting set in true can change to false
+       sender.voted = true;
+//To whom to delegate
+       sender.delegate = to;
+       Voter storage delegate_ = voters[to];
+       if (delegate_.voted) {
+           // If the delegate already voted,
+           // directly add to the number of votes
+           proposals[delegate_.vote].voteCount += sender.weight;
+       } else {
+           // If the delegate did not vote yet,
+           // add to her weight.
+           delegate_.weight += sender.weight;
+       }
+   }
+ 
+   /**
+    * @dev Give your vote (including votes delegated to you) to proposal 'proposals[proposal].name'.
+    * @param proposal index of proposal in the proposals array
+    */
+   //Voter function that's why we are here!!!
+function vote(uint proposal) public {
+       Voter storage sender = voters[msg.sender];
+	//Voting validation if you can vote or not
+       require(sender.weight != 0, "Has no right to vote");
+	//Duplicate voting validation
+       require(!sender.voted, "Already voted.");
+       sender.voted = true;
+       sender.vote = proposal;
+ 
+       // If 'proposal' is out of the range of the array,
+       // this will throw automatically and revert all
+       // changes.
+	//Vote count
+       proposals[proposal].voteCount += sender.weight;
+   }
+ 
+   /**
+    * @dev Computes the winning proposal taking all previous votes into account.
+    * @return winningProposal_ index of winning proposal in the proposals array
+    */
+//Proposal winner
+   function winningProposal() public view
+//Which proposal won
+           returns (uint winningProposal_)
+   {
+//Set winning voute count for loop
+       uint winningVoteCount = 0;
+//Loop to go through the porposals
+       for (uint p = 0; p < proposals.length; p++) {
+//Validation of what proposal has more vote assign winning based on vote count need to go through all proposals
+           if (proposals[p].voteCount > winningVoteCount) {
+               winningVoteCount = proposals[p].voteCount;
+               winningProposal_ = p;
+           }
+       }
+   }
+ 
+   /**
+    * @dev Calls winningProposal() function to get the index of the winner contained in the proposals array and then
+    * @return winnerName_ the name of the winner
+    */
+//Winner name to announce basically
+   function winnerName() public view
+           returns (bytes32 winnerName_)
+   {
+//When we have the proposal just need to go through the struct and return the name
+       winnerName_ = proposals[winningProposal()].name;
+   }
+}
+ 
